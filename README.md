@@ -1,0 +1,1 @@
+A multi-agent RAG system that connects to Robinhood via OAuth and trades stocks based on generated hypotheses grounded in financial data.
