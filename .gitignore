@@ -1,0 +1,9 @@
+# Docs
+/docs
+
+# Secrets
+.env
+.venv/
+__pycache__/
+*.pyc
+.robinhood_token.json
