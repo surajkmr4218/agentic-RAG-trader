@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 
 from pgvector.sqlalchemy import Vector
-from sqlalchemy import JSON, DateTime, Float, ForeignKey, Integer, String, Text, func
+from sqlalchemy import JSON, Date, DateTime, Float, ForeignKey, Integer, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db import Base
@@ -17,12 +17,14 @@ class Filing(Base):
     cik: Mapped[str] = mapped_column(String(16), index=True)
     form_type: Mapped[str] = mapped_column(String(16))           # 10-K / 10-Q / 8-K
     accession: Mapped[str] = mapped_column(String(32), unique=True)
-    fiscal_period: Mapped[str] = mapped_column(String(16))       # e.g. "2025-Q1"
+    # SEC period-of-report (period end). We store the real date, NOT a derived
+    # fiscal-quarter label — fiscal calendars vary by issuer.
+    report_date: Mapped[date | None] = mapped_column(Date, index=True)
     filed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     # {item_label: section_text}, e.g. {"item 1a": "...", "item 7": "..."}
     sections: Mapped[dict] = mapped_column(JSON, default=dict)
 
-    chunks: Mapped[list["Chunk"]] = relationship(back_populates="filing")
+    chunks: Mapped[list[Chunk]] = relationship(back_populates="filing")
 
 
 class Chunk(Base):
@@ -36,7 +38,7 @@ class Chunk(Base):
     embedding: Mapped[list[float] | None] = mapped_column(Vector(384))  # MiniLM/bge-small dim
     meta: Mapped[dict] = mapped_column(JSON, default=dict)       # {"ticker": "AAPL", ...}
 
-    filing: Mapped["Filing"] = relationship(back_populates="chunks")
+    filing: Mapped[Filing] = relationship(back_populates="chunks")
 
 
 class Diff(Base):
@@ -59,7 +61,7 @@ class Signal(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     ticker: Mapped[str] = mapped_column(String(16), index=True)  # ALWAYS upper-case
-    kind: Mapped[str] = mapped_column(String(16))                # insider/scores/news/analyst/prices
+    kind: Mapped[str] = mapped_column(String(16))  # insider/scores/news/analyst/prices
     payload: Mapped[dict] = mapped_column(JSON, default=dict)
     as_of: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     fetched_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
@@ -70,7 +72,7 @@ class Hypothesis(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     ticker: Mapped[str] = mapped_column(String(16), index=True)  # ALWAYS upper-case
-    direction: Mapped[str] = mapped_column(String(16))           # long / flat (no short — cash acct)
+    direction: Mapped[str] = mapped_column(String(16))  # long / flat (no short — cash acct)
     order_type: Mapped[str] = mapped_column(String(16))          # market / limit
     limit_price: Mapped[float | None] = mapped_column(Float)
     size_usd: Mapped[float] = mapped_column(Float)
@@ -90,7 +92,8 @@ class Decision(Base):
     hypothesis_id: Mapped[int] = mapped_column(ForeignKey("hypotheses.id"))
     critic_verdict: Mapped[dict] = mapped_column(JSON, default=dict)
     guardrail: Mapped[dict] = mapped_column(JSON, default=dict)
-    human_decision: Mapped[str] = mapped_column(String(16), default="pending")  # approved/rejected/pending
+    # human_decision is approved / rejected / pending
+    human_decision: Mapped[str] = mapped_column(String(16), default="pending")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
