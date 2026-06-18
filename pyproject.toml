@@ -28,6 +28,8 @@ dev = [
 [tool.ruff]
 line-length = 100
 target-version = "py312"
+# Alembic-generated migrations are reviewed for correctness, not style.
+extend-exclude = ["alembic/versions"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP"]   # errors, pyflakes, import-sort, pyupgrade
