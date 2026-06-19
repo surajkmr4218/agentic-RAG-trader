@@ -1,5 +1,7 @@
 # Docs
 /docs
+aapl_10k_raw.txt
+aapl_10k_sections.json
 
 # Secrets
 .env
@@ -7,3 +9,4 @@
 __pycache__/
 *.pyc
 .robinhood_token.json
+
