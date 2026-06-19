@@ -1,30 +1,40 @@
 from __future__ import annotations
 
 import re
+
 from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.models import Chunk, Filing
 from app.rag.embed import embed
 
-PARA_SPLIT = re.compile(r"\n{2,}")  # blank-line-separated paragraphs
+PARA_SPLIT = re.compile(r"\n+")  # split on any newline run (SEC text uses single \n)
 
 def chunk_section(text: str, target: int = 1200, overlap: int = 150) -> list[str]:
-    """Pack paragraphs into ~target-char chunks with a char overlap tail.
+    """Pack text lines into ~target-char chunks with a char overlap tail.
 
-    Pure function: no IO. Splits on blank lines, accumulates paragraphs until the
-    buffer would exceed `target`, flushes, then seeds the next buffer with the last
-    `overlap` chars so context straddling a boundary survives.
+    Pure function: SEC filings flatten to single-`\n` lines (no blank-line
+    paragraphs), so we split on any newline run, hard-slice any single line still
+    larger than target (else it would never be cut), then accumulate lines until
+    the buffer would exceed target, flush, and seed the next buffer with the last
+    overlap chars so context straddling a boundary survives.
     """
-    paras = [p.strip() for p in PARA_SPLIT.split(text) if p.strip()]
+    raw = [p.strip() for p in PARA_SPLIT.split(text) if p.strip()]
+    segments: list[str] = []
+    for p in raw:
+        if len(p) <= target:
+            segments.append(p)
+        else:  # a single oversized line: hard-window it so nothing exceeds target
+            segments += [p[i:i + target] for i in range(0, len(p), target)]
+
     chunks: list[str] = []
     buf = ""
-    for para in paras:
-        if buf and len(buf) + len(para) + 1 > target:
+    for seg in segments:
+        if buf and len(buf) + len(seg) + 1 > target:
             chunks.append(buf)
-            buf = buf[-overlap:] + "\n" + para  # carry overlap tail
+            buf = buf[-overlap:] + "\n" + seg  # carry overlap tail
         else:
-            buf = f"{buf}\n{para}" if buf else para
+            buf = f"{buf}\n{seg}" if buf else seg
     if buf.strip():
         chunks.append(buf)
     return chunks
