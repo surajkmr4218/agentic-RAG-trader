@@ -32,9 +32,11 @@ def dense(db: Session, query: str, k: int = 30, ticker: str | None = None) -> li
             """
             SELECT id, text
             FROM chunks
-            WHERE (:ticker IS NULL OR meta->>'ticker' = :ticker)
-            -- Cast the bound param to vector: psycopg sends str(qv) as `text`, and pgvector's
-            -- `<=>` is only defined as vector<=>vector, so without the cast Postgres throws.
+            -- Cast :ticker to text: it appears first in `IS NULL`, where Postgres can't infer the
+            -- param type from psycopg's binary protocol and errors without an explicit type.
+            WHERE ((:ticker)::text IS NULL OR meta->>'ticker' = (:ticker)::text)
+            -- Cast :qv to vector: psycopg sends str(qv) as `text`, and pgvector's `<=>` is only
+            -- defined as vector<=>vector, so without the cast Postgres throws.
             ORDER BY embedding <=> (:qv)::vector
             LIMIT :k
             """
