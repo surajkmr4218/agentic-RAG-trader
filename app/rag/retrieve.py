@@ -33,7 +33,9 @@ def dense(db: Session, query: str, k: int = 30, ticker: str | None = None) -> li
             SELECT id, text
             FROM chunks
             WHERE (:ticker IS NULL OR meta->>'ticker' = :ticker)
-            ORDER BY embedding <=> :qv
+            -- Cast the bound param to vector: psycopg sends str(qv) as `text`, and pgvector's
+            -- `<=>` is only defined as vector<=>vector, so without the cast Postgres throws.
+            ORDER BY embedding <=> (:qv)::vector
             LIMIT :k
             """
         ),
@@ -42,7 +44,9 @@ def dense(db: Session, query: str, k: int = 30, ticker: str | None = None) -> li
     return [(r.id, r.text) for r in rows]
 
 
-def _bm25_rank(query: str, corpus_texts: list[str], corpus_ids: list[int], k: int = 30) -> list[int]:
+def _bm25_rank(
+    query: str, corpus_texts: list[str], corpus_ids: list[int], k: int = 30
+) -> list[int]:
     """Sparse lexical ranking over an in-memory corpus using BM25Okapi.
 
     NOTE: rank_bm25 rebuilds the index per call from the passed corpus. That's fine for the eval
@@ -64,7 +68,7 @@ def rrf(*rankings: list[int], k: int = 60) -> list[tuple[int, float]]:
     Each argument is a ranked list of ids (best first). An id's fused score is the sum over the
     lists it appears in of 1 / (k + rank). `k` (the standard 60) damps the influence of any single
     list's top spot so one retriever can't dominate. Returns ids sorted by fused score, descending.
-    We use *rankings for future flexibility (e.g. add a third sparse signal) but currently it's just dense and BM25.
+    We accept *rankings for flexibility (e.g. a third sparse signal); today it's dense + BM25.
     """
     scores: dict[int, float] = defaultdict(float)
     for ranking in rankings:

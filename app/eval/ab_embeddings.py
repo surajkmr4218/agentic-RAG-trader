@@ -42,7 +42,9 @@ def run_ab(k: int = 5) -> dict[str, float]:
     for label, model_name in CANDIDATES.items():
         precisions = []
         for case in GOLD:
-            ranked = _dense_rank(model_name, case["query"], case["corpus_texts"], case["corpus_ids"])
+            ranked = _dense_rank(
+                model_name, case["query"], case["corpus_texts"], case["corpus_ids"]
+            )
             precisions.append(_precision_at_k(ranked, set(case["relevant_chunk_ids"]), k))
         results[label] = round(float(np.mean(precisions)), 4)
     return results
