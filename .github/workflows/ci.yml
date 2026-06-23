@@ -19,5 +19,5 @@ jobs:
       - name: Lint
         run: uv run ruff check .
 
-      - name: Tests  
-        run: uv run pytest -q
+      - name: Run eval suite (prints RAG metrics)
+        run: uv run pytest -q -s   # -s so the RAG EVAL METRICS block prints in the PR log
