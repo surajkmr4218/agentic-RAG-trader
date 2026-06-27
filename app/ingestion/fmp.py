@@ -89,3 +89,58 @@ def price_target_consensus(session: Session, ticker: str) -> Any:
     return _cached(
         session, ticker, "price_target_consensus", "price-target-consensus", symbol=ticker,
     )
+
+def price_target_upside(targets: Any, last_price: float | None) -> dict:
+    """Reduce price-target-consensus to upside vs the latest close."""
+    t = targets[0] if isinstance(targets, list) and targets else (targets or {})
+    consensus = t.get("targetConsensus") or t.get("targetMedian")
+    if not consensus or not last_price:
+        return {"consensus": consensus, "upside": None, "bullish": False}
+    upside = (float(consensus) - last_price) / last_price
+    return {"consensus": float(consensus), "upside": round(upside, 3), "bullish": upside > 0}
+
+
+def consensus_skew(consensus: Any) -> dict:
+    """Reduce grades-consensus to a single bullish-skew float in [-1, 1]."""
+    c = consensus[0] if isinstance(consensus, list) and consensus else (consensus or {})
+    sb, b = float(c.get("strongBuy") or 0), float(c.get("buy") or 0)
+    h = float(c.get("hold") or 0)
+    s, ss = float(c.get("sell") or 0), float(c.get("strongSell") or 0)
+    total = sb + b + h + s + ss
+    if total == 0:
+        return {"skew": 0.0, "n": 0}
+    skew = (2 * sb + b - s - 2 * ss) / (2 * total)
+    return {"skew": round(skew, 3), "n": int(total)}
+
+def attach_signals(session: Session, ticker: str, bundle: dict) -> dict:
+    """Take the Week-2 evidence bundle and bolt a structured `signals` block onto it."""
+    scores = financial_scores(session, ticker)
+    prices = eod_prices(session, ticker)
+    consensus = analyst_consensus(session, ticker)
+    grades = analyst_grades(session, ticker, limit=10)
+    targets = price_target_consensus(session, ticker)
+
+    score = scores[0] if isinstance(scores, list) and scores else (scores or {})
+    last_price = float(prices[0]["price"]) if isinstance(prices, list) and prices else None
+    skew = consensus_skew(consensus)
+    upside = price_target_upside(targets, last_price)
+
+    bundle["signals"] = {
+        "financial_scores": {
+            "altman_z": score.get("altmanZScore"),
+            "piotroski": score.get("piotroskiScore"),
+        },
+        "last_price": last_price,
+        "analyst_consensus": skew,
+        "recent_grades": [
+            {"firm": g.get("gradingCompany"), "action": g.get("action"),
+             "to": g.get("newGrade")}
+            for g in (grades or [])[:5]
+        ],
+        "price_target": upside,
+    }
+    # Long-only convenience flag the hypothesis node reads directly.
+    bundle["signals"]["bullish_tail"] = bool(
+        upside["bullish"] or skew["skew"] > 0.2 or (score.get("piotroskiScore") or 0) >= 7
+    )
+    return bundle
