@@ -1,5 +1,5 @@
 def main():
-    print("Hello from agentic-rag-trader!")
+    print("Hello from alphagen!")
 
 
 if __name__ == "__main__":
