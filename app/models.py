@@ -61,7 +61,7 @@ class Signal(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     ticker: Mapped[str] = mapped_column(String(16), index=True)  # ALWAYS upper-case
-    kind: Mapped[str] = mapped_column(String(16))  # insider/scores/news/analyst/prices
+    kind: Mapped[str] = mapped_column(String(32))  # insider/scores/news/analyst/prices
     payload: Mapped[dict] = mapped_column(JSON, default=dict)
     as_of: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     fetched_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
