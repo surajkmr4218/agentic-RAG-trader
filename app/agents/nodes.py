@@ -6,7 +6,7 @@ import re
 from app.agents.state import TradeState
 from app.config import settings
 
-MODEL = "gemini-3.5-flash"   # reasoning nodes; bump to gemini-3.1-pro only if reasoning falls short
+MODEL = "gemini-3.1-flash-lite"   # reasoning nodes; bump to gemini-3.5-flash/3.1-pro if weak
 _FENCE = re.compile(r"^```(?:json)?\s*|\s*```$", re.MULTILINE)
 
 
