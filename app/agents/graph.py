@@ -3,11 +3,6 @@ from __future__ import annotations
 from app.agents.state import TradeState
 
 
-def _guardrail_stub(state: TradeState) -> dict:
-    # Week 5 replaces this with deterministic rules (position/exposure caps, etc.).
-    return {"guardrail": {"passed": True, "results": [], "_stub": True}}
-
-
 def _execute_stub(state: TradeState) -> dict:
     # Week 7 replaces this with the Robinhood place_equity_order mapping.
     return {"order": {"status": "stub", "_stub": True}}
@@ -30,13 +25,13 @@ def build_graph():
     from langgraph.checkpoint.memory import MemorySaver
     from langgraph.graph import END, START, StateGraph
 
-    from app.agents.nodes import critic_node, hypothesis_node, research_node
+    from app.agents.nodes import critic_node, guardrail_node, hypothesis_node, research_node
 
     g = StateGraph(TradeState)
     g.add_node("research", research_node)
     g.add_node("hypothesis", hypothesis_node)
     g.add_node("critic", critic_node)
-    g.add_node("guardrail", _guardrail_stub)   # Week 5
+    g.add_node("guardrail", guardrail_node)
     g.add_node("execute", _execute_stub)       # Week 7
 
     g.add_edge(START, "research")
