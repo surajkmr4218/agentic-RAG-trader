@@ -5,10 +5,8 @@ import re
 from datetime import date
 
 from app.agents.state import TradeState
-from app.config import settings, guardrail_cfg
+from app.config import guardrail_cfg, settings
 from app.guardrails.rules import validate
-
-from app.config import settings
 
 MODEL = "gemini-3.1-flash-lite"   # reasoning nodes; bump to gemini-3.5-flash/3.1-pro if weak
 _FENCE = re.compile(r"^```(?:json)?\s*|\s*```$", re.MULTILINE)
@@ -137,9 +135,8 @@ def critic_node(state: TradeState) -> dict:
 def _account_snapshot(db, ticker: str) -> dict:
     """Pull the deterministic account facts validate() needs. In Week 7 this reads the broker;
     for now it reads our own Order/Outcome rows so the backtest and live path share one shape."""
-    from app.models import Order  # lazy
+    from app.models import Order
 
-    today = date.today()
     deployed = db.query(Order).filter(Order.status == "filled").count() and 0.0 or 0.0
     # NOTE: real deployed/pnl come from positions in Week 7; here we expose the shape.
     return {"ticker": ticker, "deployed": deployed, "trades_today": 0, "pnl_today": 0.0}
@@ -149,7 +146,8 @@ def guardrail_node(state: TradeState) -> dict:
     """Read hypothesis + evidence from state, fetch account/today/cfg, run the pure validator,
     write the full result (passed + every rule) back to state. Never raises on a 'bad' trade —
     a blocked trade is a NORMAL outcome that gets logged, not an error."""
-    from app.db import SessionLocal  # lazy
+    from app.agents.logging import write_decision
+    from app.db import SessionLocal
 
     h = state.get("hypothesis") or {}
     evidence = state.get("evidence") or {}
@@ -163,4 +161,11 @@ def guardrail_node(state: TradeState) -> dict:
     finally:
         db.close()
     result = validate(h, account, date.today(), evidence, guardrail_cfg())
-    return {"guardrail": result}
+    out =  {"guardrail": result}
+    
+    db = SessionLocal()
+    try:
+        write_decision(db, {**state, **out}, user_id="owner")
+    finally:
+        db.close()
+    return out
