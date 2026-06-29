@@ -145,8 +145,8 @@ def _account_snapshot(db, ticker: str) -> dict:
 def guardrail_node(state: TradeState) -> dict:
     """Read hypothesis + evidence from state, fetch account/today/cfg, run the pure validator,
     write the full result (passed + every rule) back to state. Never raises on a 'bad' trade —
-    a blocked trade is a NORMAL outcome that gets logged, not an error."""
-    from app.agents.logging import write_decision
+    a blocked trade is a NORMAL outcome that gets logged, not an error. The DB write happens in
+    log_node (which also runs on the critic-reject path), not here."""
     from app.db import SessionLocal
 
     h = state.get("hypothesis") or {}
@@ -161,11 +161,20 @@ def guardrail_node(state: TradeState) -> dict:
     finally:
         db.close()
     result = validate(h, account, date.today(), evidence, guardrail_cfg())
-    out =  {"guardrail": result}
-    
+    return {"guardrail": result}
+
+
+def log_node(state: TradeState) -> dict:
+    """Persist the decision record for EVERY run — critic-accepted AND critic-rejected — so the
+    dashboard reasoning trail is complete. Reached after guardrail (accept path) or directly
+    after critic (reject path), so `state` may have no guardrail; write_decision handles that
+    (passed=False, no Order). Runs before the execute interrupt."""
+    from app.agents.logging import write_decision
+    from app.db import SessionLocal
+
     db = SessionLocal()
     try:
-        write_decision(db, {**state, **out}, user_id="owner")
+        write_decision(db, state, user_id="owner")
     finally:
         db.close()
-    return out
+    return {}

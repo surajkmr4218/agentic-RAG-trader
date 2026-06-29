@@ -3,7 +3,18 @@ from __future__ import annotations
 from datetime import date, datetime
 
 from pgvector.sqlalchemy import Vector
-from sqlalchemy import JSON, Date, DateTime, Float, ForeignKey, Integer, String, Text, func
+from sqlalchemy import (
+    JSON,
+    Boolean,
+    Date,
+    DateTime,
+    Float,
+    ForeignKey,
+    Integer,
+    String,
+    Text,
+    func,
+)
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db import Base
@@ -86,13 +97,18 @@ class Hypothesis(Base):
 class Decision(Base):
     __tablename__ = "decisions"
 
-    id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    decision_id: Mapped[str] = mapped_column(String(64), unique=True)  # idempotency key
-    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
-    hypothesis_id: Mapped[int] = mapped_column(ForeignKey("hypotheses.id"))
-    critic_verdict: Mapped[dict] = mapped_column(JSON, default=dict)
-    guardrail: Mapped[dict] = mapped_column(JSON, default=dict)
-    # human_decision is approved / rejected / pending
+    # decision_id is the PRIMARY KEY so `db.merge()` in write_decision() is idempotent on
+    # re-invoke (Week-7 resume) and equals the LangGraph thread_id. Flat (Week-5) schema:
+    # the full reasoning trail is stored inline as JSON so the dashboard reads one row.
+    decision_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    ticker: Mapped[str] = mapped_column(String(16), index=True)     # ALWAYS upper-case
+    hypothesis: Mapped[dict] = mapped_column(JSON, default=dict)    # structured trade proposal
+    critic_verdict: Mapped[dict | None] = mapped_column(JSON, default=dict)
+    guardrail: Mapped[dict] = mapped_column(JSON, default=dict)     # {passed, results}
+    passed: Mapped[bool] = mapped_column(Boolean, default=False)    # all HARD rules passed
+    # RLS tenant key (Week 6). Indexed because every query is scoped by it under Row-Level Security.
+    user_id: Mapped[str] = mapped_column(String(64), default="owner", index=True)
+    # approved / rejected / pending — set at the Week-7 human-approval gate.
     human_decision: Mapped[str] = mapped_column(String(16), default="pending")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
@@ -100,29 +116,38 @@ class Decision(Base):
 class Order(Base):
     __tablename__ = "orders"
 
-    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    # decision_id is the PK (one order per decision) so the write is idempotent via merge.
     decision_id: Mapped[str] = mapped_column(
-        String(64), ForeignKey("decisions.decision_id"), unique=True
+        String(64), ForeignKey("decisions.decision_id"), primary_key=True
     )
-    symbol: Mapped[str] = mapped_column(String(16))             # ALWAYS upper-case
+    # RLS tenant key (Week 6) — stamped by write_decision, mirrors the decision's owner.
+    user_id: Mapped[str | None] = mapped_column(String(64), index=True)
+    symbol: Mapped[str] = mapped_column(String(16))            # ALWAYS upper-case
     side: Mapped[str] = mapped_column(String(8))               # buy / sell
-    quantity: Mapped[float] = mapped_column(Float)
     order_type: Mapped[str] = mapped_column(String(16))        # market / limit
+    size_usd: Mapped[float] = mapped_column(Float)             # dollar notional of the order
+    qty: Mapped[float | None] = mapped_column(Float)           # share count — filled Week 7
     limit_price: Mapped[float | None] = mapped_column(Float)
-    broker_order_id: Mapped[str | None] = mapped_column(String(64))
-    status: Mapped[str] = mapped_column(String(32))
-    reason: Mapped[str | None] = mapped_column(Text)
-    placed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    status: Mapped[str] = mapped_column(String(32))            # pending -> filled/rejected (Week 7)
+    broker_order_id: Mapped[str | None] = mapped_column(String(64))  # filled Week 7
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
 class Outcome(Base):
     __tablename__ = "outcomes"
 
+    # Realized performance of an executed trade — written by the Week-7 reconciliation job
+    # after a fill, then again once the horizon elapses. All result fields are nullable
+    # because reconciliation fills them in stages. Keyed by decision_id (the Order PK).
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    order_id: Mapped[int] = mapped_column(ForeignKey("orders.id"), index=True)
-    fill_price: Mapped[float | None] = mapped_column(Float)
-    forward_return: Mapped[float | None] = mapped_column(Float)
-    spy_return: Mapped[float | None] = mapped_column(Float)
+    decision_id: Mapped[str] = mapped_column(
+        String(64), ForeignKey("decisions.decision_id"), index=True
+    )
+    # RLS tenant key (Week 6) — written by the Week-7 reconciliation job from the order's owner.
+    user_id: Mapped[str | None] = mapped_column(String(64), index=True)
+    fill_price: Mapped[float | None] = mapped_column(Float)        # actual broker fill
+    forward_return: Mapped[float | None] = mapped_column(Float)    # realized N-day return
+    spy_return: Mapped[float | None] = mapped_column(Float)        # SPY over the same window
     horizon_days: Mapped[int | None] = mapped_column(Integer)
     resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
