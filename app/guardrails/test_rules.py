@@ -2,8 +2,6 @@ from __future__ import annotations
 
 from datetime import date
 
-import pytest
-
 from app.guardrails.rules import _citations_resolve, validate
 
 CFG = {
