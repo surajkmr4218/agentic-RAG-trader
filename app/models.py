@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import datetime as dt
 from datetime import date, datetime
 
 from pgvector.sqlalchemy import Vector
@@ -150,14 +151,22 @@ class Outcome(Base):
     spy_return: Mapped[float | None] = mapped_column(Float)        # SPY over the same window
     horizon_days: Mapped[int | None] = mapped_column(Integer)
     resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-
-
+    
 class User(Base):
     __tablename__ = "users"
 
-    id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    clerk_user_id: Mapped[str | None] = mapped_column(String(64), unique=True)  # set in Week 6
-    role: Mapped[str] = mapped_column(String(16), default="owner")              # owner / public
-    # Fernet ciphertext — populated Week 6, ENCRYPTED AT REST. Plaintext never lands here.
-    robinhood_token_enc: Mapped[str | None] = mapped_column(Text)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    id: Mapped[int] = mapped_column(primary_key=True)
+    clerk_user_id: Mapped[str] = mapped_column(String(255), unique=True, index=True)  # the "sub"
+    email: Mapped[str | None] = mapped_column(String(320), nullable=True)
+    role: Mapped[str] = mapped_column(String(16), default="public")  # "owner" | "public"
+
+    robinhood_linked: Mapped[bool] = mapped_column(Boolean, default=False)
+    rh_access_token_enc: Mapped[str | None] = mapped_column(Text, nullable=True)   # Fernet ciphertext
+    rh_refresh_token_enc: Mapped[str | None] = mapped_column(Text, nullable=True)  # never plaintext
+
+    created_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+def execution_enabled_for(user: User) -> bool:
+    """role -> the execution_enabled flag the Week-4 graph consumes. Total: owner trades, else read-only."""
+    return user.role == "owner"

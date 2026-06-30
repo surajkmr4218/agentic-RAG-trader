@@ -1,6 +1,10 @@
 from __future__ import annotations
 
+import uuid
+
 from app.agents.state import TradeState
+
+from app.models import User
 
 
 def _execute_stub(state: TradeState) -> dict:
@@ -56,3 +60,32 @@ def build_graph():
     # interrupt_before=["execute"] is the human-approval pause — the graph stops BEFORE
     # execute and waits for graph.invoke(None, config=...) after the owner approves.
     return g.compile(checkpointer=MemorySaver(), interrupt_before=["execute"])
+
+
+def run_graph(
+    ticker: str,
+    user: User,
+    *,
+    query: str | None = None,
+    decision_id: str | None = None,
+) -> dict:
+    """Assemble the initial TradeState for `user` and run the graph to its first stop.
+
+    The Week-4 contract is frozen — `execution_enabled` is *derived* from the user's role
+    via execution_enabled_for, never set by hand. Public tier ends at END; owner tier pauses
+    at interrupt_before=["execute"] for the Week-7 approval gate.
+    """
+    from app.models import execution_enabled_for
+
+    decision_id = decision_id or str(uuid.uuid4())
+    state: TradeState = {
+        "ticker": ticker,
+        "execution_enabled": execution_enabled_for(user),
+        "decision_id": decision_id,
+    }
+    if query is not None:
+        state["query"] = query
+
+    graph = build_graph()
+    cfg = {"configurable": {"thread_id": decision_id}}
+    return graph.invoke(state, config=cfg)
