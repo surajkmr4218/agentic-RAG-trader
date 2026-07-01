@@ -3,7 +3,6 @@ from __future__ import annotations
 import uuid
 
 from app.agents.state import TradeState
-
 from app.models import User
 
 

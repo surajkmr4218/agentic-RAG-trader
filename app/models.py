@@ -161,12 +161,15 @@ class User(Base):
     role: Mapped[str] = mapped_column(String(16), default="public")  # "owner" | "public"
 
     robinhood_linked: Mapped[bool] = mapped_column(Boolean, default=False)
-    rh_access_token_enc: Mapped[str | None] = mapped_column(Text, nullable=True)   # Fernet ciphertext
-    rh_refresh_token_enc: Mapped[str | None] = mapped_column(Text, nullable=True)  # never plaintext
+    # Fernet ciphertext — never plaintext
+    rh_access_token_enc: Mapped[str | None] = mapped_column(Text, nullable=True)
+    rh_refresh_token_enc: Mapped[str | None] = mapped_column(Text, nullable=True)
 
-    created_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    created_at: Mapped[dt.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
 
 
 def execution_enabled_for(user: User) -> bool:
-    """role -> the execution_enabled flag the Week-4 graph consumes. Total: owner trades, else read-only."""
+    """role -> execution_enabled the Week-4 graph consumes: owner trades, else read-only."""
     return user.role == "owner"
