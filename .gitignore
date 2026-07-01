@@ -4,6 +4,7 @@ aapl_10k_raw.txt
 aapl_10k_sections.json
 
 # Secrets
+web/.env.local
 .env
 .venv/
 __pycache__/
