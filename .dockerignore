@@ -1,0 +1,11 @@
+# Never bake these into the image (rebuilt/injected at runtime, or host-specific)
+.venv
+**/__pycache__
+*.pyc
+.git
+.env
+node_modules
+web/node_modules
+web/dist
+.ruff_cache
+.pytest_cache

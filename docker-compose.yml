@@ -17,5 +17,22 @@ services:
       timeout: 3s
       retries: 5
 
+  api:
+    build: .
+    env_file: .env
+    # Override the DB host: inside the network the database is `db`, not localhost.
+    # `environment` wins over env_file, so this replaces the .env DATABASE_URL.
+    environment:
+      DATABASE_URL: postgresql+psycopg://app:app@db:5432/alphagen
+    ports:
+      - "8000:8000"
+    # Bind-mount source for --reload. The runtime venv lives at /opt/venv (see
+    # Dockerfile), so this mount does NOT shadow it with the host .venv.
+    volumes:
+      - .:/app
+    depends_on:
+      db:
+        condition: service_healthy
+
 volumes:
   pgdata:
